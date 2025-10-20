@@ -71,28 +71,31 @@
 
 ## ⚙️ Supabase Edge Functions
 
-### `/functions/entitlement/index.ts`
-
-```ts
-import { serve } from "https://deno.land/std/http/server.ts";
-import { getUser } from "../_shared/auth.ts";
-import { supabaseAdmin } from "../_shared/client.ts";
-
-serve(async (req) => {
-  const user = await getUser(req);
-  if (!user) return new Response(JSON.stringify({ valid: false }), { status: 200 });
-
-  const { data } = await supabaseAdmin
-    .from("license_keys")
-    .select("*")
-    .eq("user_id", user.id)
-    .eq("status", "active")
-    .maybeSingle();
-
-  const valid = !!data;
-  return new Response(JSON.stringify({ valid, ...data }), { status: 200 });
-});
-```
+/supabase/functions/
+ kwjxtfyzerwynwqnbpjk.supabase.co/functions/v1/
+│
+├─ license-precheck/
+│    └─ https://kwjxtfyzerwynwqnbpjk.supabase.co/functions/v1/license-precheck
+│
+├─ activate/
+│    └─ https://kwjxtfyzerwynwqnbpjk.supabase.co/functions/v1/activate
+│
+├─ entitlement/
+│    └─ https://kwjxtfyzerwynwqnbpjk.supabase.co/functions/v1/entitlement
+│
+├─ _shared-ts/
+│    ├─ auth.ts
+│    └─ client.ts
+│    └─ https://kwjxtfyzerwynwqnbpjk.supabase.co/functions/v1/_shared-ts
+│
+├─ oauth-authorize/
+│    └─ https://kwjxtfyzerwynwqnbpjk.supabase.co/functions/v1/oauth-authorize
+│
+├─ oauth-token/
+│    └─ https://kwjxtfyzerwynwqnbpjk.supabase.co/functions/v1/oauth-token
+│
+└─ oauth-callback/
+     └─ https://kwjxtfyzerwynwqnbpjk.supabase.co/functions/v1/oauth-callback
 
 ---
 
@@ -119,10 +122,33 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  valid:
-                    type: boolean
+                $ref: "#/components/schemas/EntitlementResponse"
+
+components:
+  securitySchemes:
+    oauth:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://kwjxtfyzerwynwqnbpjk.supabase.co/functions/v1/oauth-authorize
+          tokenUrl: https://kwjxtfyzerwynwqnbpjk.supabase.co/functions/v1/oauth-token
+          scopes: {}
+
+  schemas:
+    EntitlementResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+          example: true
+        reason:
+          type: string
+          enum:             
+            - no_token
+            - no_active_license
+            - expired_license
+          example: expired_license   
+
 ```
 
 ---
