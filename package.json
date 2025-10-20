@@ -1,0 +1,17 @@
+{
+  "name": "gpt-actions",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Utility actions for custom GPT workflows.",
+  "dependencies": {
+    "sharp": "^0.33.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.25",
+    "typescript": "^5.3.3"
+  },
+  "scripts": {
+    "build": "tsc",
+    "postinstall": "npm rebuild sharp"
+  }
+}
