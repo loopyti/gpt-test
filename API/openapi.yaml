@@ -24,10 +24,8 @@ index 0000000000000000000000000000000000000000..01fd7835afa1e6afb9da65b91f44457b
 +        - images
 +      summary: Convert raw base64 image payloads into optimized PNG downloads.
 +      description: |
-+        Consumes raw image outputs (OpenAI `b64_json` objects or data-URL
-+        strings), rescales each so its longest side is 2048&nbsp;px, saves PNGs with
-+        300&nbsp;DPI metadata to `/mnt/data`, then returns markdown links for
-+        downloading the optimized files from the sandbox.
++        Rescales base64 PNGs to 2048 px max side, saves with 300 DPI metadata
+         to `/mnt/data`, and returns markdown download links.
 +      requestBody:
 +        required: true
 +        content:
