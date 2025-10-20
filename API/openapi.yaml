@@ -1,185 +1,189 @@
-openapi: 3.1.0
-info:
-  title: Loopyti Image Actions
-  version: "1.0.0"
-  description: |
-    REST endpoints that wrap the helper scripts stored in this repository for
-    post-processing, resizing, and automatically cropping PNG assets generated
-    by creative tools.
-servers:
-  - url: https://raw.githubusercontent.com/loopyti/gpt-test/main/API
-    description: Hosted helper scripts that can be executed from the GPT Actions sandbox.
-paths:
-  /postprocess-images:
-    post:
-      operationId: postprocessImages
-      tags:
-        - images
-      summary: Convert raw base64 image payloads into optimized PNG downloads.
-      description: |
-        Consumes raw image outputs (OpenAI `b64_json` objects or data-URL
-        strings), rescales each so its longest side is 2048&nbsp;px, saves PNGs with
-        300&nbsp;DPI metadata to `/mnt/data`, then returns markdown links for
-        downloading the optimized files from the sandbox.
-        Accepts the raw outputs returned from image generation APIs (either
-        OpenAI-style `b64_json` dictionaries or data-URL strings), rescales the
-        assets so the longest side is 2048&nbsp;px, writes them to `/mnt/data`
-        with 300&nbsp;DPI metadata, and returns markdown links that can be used to
-        download the processed images from the GPT sandbox environment.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/PostprocessImagesRequest"
-            example:
-              images:
-                - b64_json: "<base64>"
-                - "data:image/png;base64,<base64>"
-      responses:
-        "200":
-          description: Markdown summary with download links for the processed PNG files.
-          content:
-            text/markdown:
-              schema:
-                type: string
-              example: |
-                ✅이미지 생성 완료
-
-                [2048px·300dpi 다운로드](sandbox:/mnt/data/img_01_2048_300dpi.png)
-        "400":
-          description: Returned if none of the provided items can be decoded.
-          content:
-            text/plain:
-              schema:
-                type: string
-  /resize-images:
-    post:
-      operationId: resizeImages
-      tags:
-        - images
-      summary: Create alternate sizes for the last batch of processed images.
-      description: |
-        Resizes the cached image set produced by a previous `postprocessImages`
-        call. When `selectedIndices` is omitted, every cached image is resized.
-        The result is printed as markdown links targeting sandbox download URLs.
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ResizeImagesRequest"
-            example:
-              factor: 1.5
-              selectedIndices: [1, 3]
-      responses:
-        "200":
-          description: Markdown list of download links for the resized PNG files.
-          content:
-            text/markdown:
-              schema:
-                type: string
-              example: |
-                1️⃣ [x1.5 다운로드](sandbox:/mnt/data/img_01_2048_300dpi_x1.5.png)
-        "400":
-          description: Returned when no cached images exist or the selected indices do not match.
-          content:
-            text/plain:
-              schema:
-                type: string
-  /autocrop-png:
-    post:
-      operationId: autocropPng
-      tags:
-        - images
-      summary: Automatically crop transparent padding from a PNG image.
-      description: |
-        Removes transparent borders from a PNG input, optionally extending the
-        detected bounding box by a few pixels of padding. The cropped image is
-        saved to `/mnt/data` with 300&nbsp;DPI metadata and a sandbox download link is
-        returned in markdown format along with bounding-box diagnostics.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AutocropRequest"
-            example:
-              image:
-                b64_json: "<base64>"
-              padding: 24
-      responses:
-        "200":
-          description: Markdown response describing the cropped output and download link.
-          content:
-            text/markdown:
-              schema:
-                type: string
-              example: |
-                ✅ 자동 크롭 완료 — 1024x768px
-                [크롭된 PNG 다운로드](sandbox:/mnt/data/autocrop_0001.png)
-                📐 Bounding Box: left=12, top=24, right=1036, bottom=792
-        "400":
-          description: Returned when the PNG data cannot be decoded.
-          content:
-            text/plain:
-              schema:
-                type: string
-components:
-  schemas:
-    ImageInput:
-      description: >-
-        PNG payload provided either as an OpenAI-style dictionary or a
-        data-URL/string path accessible to the runtime.
-      oneOf:
-        - type: object
-          required:
-            - b64_json
-          properties:
-            b64_json:
-              type: string
-              format: byte
-              description: Base64-encoded PNG content as returned by OpenAI image APIs.
-        - type: string
-          description: >-
-            Either a `data:image/...;base64,` URL or a filesystem path that can be
-            read by the runtime.
-    PostprocessImagesRequest:
-      type: object
-      required:
-        - images
-      properties:
-        images:
-          type: array
-          minItems: 1
-          items:
-            $ref: "#/components/schemas/ImageInput"
-    ResizeImagesRequest:
-      type: object
-      properties:
-        factor:
-          type: number
-          default: 2.0
-          minimum: 0.1
-          maximum: 4.0
-          description: Scale multiplier applied to the cached images.
-        selectedIndices:
-          type: array
-          items:
-            type: integer
-            minimum: 1
-          description: 1-based indices of the cached images that should be resized.
-    AutocropRequest:
-      type: object
-      required:
-        - image
-      properties:
-        image:
-          $ref: "#/components/schemas/ImageInput"
-        padding:
-          type: integer
-          default: 0
-          minimum: 0
-          description: >-
-            Expands each side of the detected bounding box by the provided number
-            of pixels after cropping.
+ (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
+diff --git a/API/openapi.yaml b/API/openapi.yaml
+new file mode 100644
+index 0000000000000000000000000000000000000000..01fd7835afa1e6afb9da65b91f44457b88d00f18
+--- /dev/null
++++ b/API/openapi.yaml
+@@ -0,0 +1,180 @@
++openapi: 3.1.0
++info:
++  title: Loopyti Image Actions
++  version: "1.0.0"
++  description: |
++    REST endpoints that wrap the helper scripts stored in this repository for
++    post-processing, resizing, and automatically cropping PNG assets generated
++    by creative tools.
++servers:
++  - url: https://raw.githubusercontent.com/loopyti/gpt-test/main/API
++    description: Hosted helper scripts that can be executed from the GPT Actions sandbox.
++paths:
++  /postprocess-images:
++    post:
++      operationId: postprocessImages
++      tags:
++        - images
++      summary: Convert raw base64 image payloads into optimized PNG downloads.
++      description: |
++        Consumes raw image outputs (OpenAI `b64_json` objects or data-URL
++        strings), rescales each so its longest side is 2048&nbsp;px, saves PNGs with
++        300&nbsp;DPI metadata to `/mnt/data`, then returns markdown links for
++        downloading the optimized files from the sandbox.
++      requestBody:
++        required: true
++        content:
++          application/json:
++            schema:
++              $ref: "#/components/schemas/PostprocessImagesRequest"
++            example:
++              images:
++                - b64_json: "<base64>"
++                - "data:image/png;base64,<base64>"
++      responses:
++        "200":
++          description: Markdown summary with download links for the processed PNG files.
++          content:
++            text/markdown:
++              schema:
++                type: string
++              example: |
++                ✅이미지 생성 완료
++
++                [2048px·300dpi 다운로드](sandbox:/mnt/data/img_01_2048_300dpi.png)
++        "400":
++          description: Returned if none of the provided items can be decoded.
++          content:
++            text/plain:
++              schema:
++                type: string
++  /resize-images:
++    post:
++      operationId: resizeImages
++      tags:
++        - images
++      summary: Create alternate sizes for the last batch of processed images.
++      description: |
++        Resizes the cached image set produced by a previous `postprocessImages`
++        call. When `selectedIndices` is omitted, every cached image is resized.
++        The result is printed as markdown links targeting sandbox download URLs.
++      requestBody:
++        required: false
++        content:
++          application/json:
++            schema:
++              $ref: "#/components/schemas/ResizeImagesRequest"
++            example:
++              factor: 1.5
++              selectedIndices: [1, 3]
++      responses:
++        "200":
++          description: Markdown list of download links for the resized PNG files.
++          content:
++            text/markdown:
++              schema:
++                type: string
++              example: |
++                1️⃣ [x1.5 다운로드](sandbox:/mnt/data/img_01_2048_300dpi_x1.5.png)
++        "400":
++          description: Returned when no cached images exist or the selected indices do not match.
++          content:
++            text/plain:
++              schema:
++                type: string
++  /autocrop-png:
++    post:
++      operationId: autocropPng
++      tags:
++        - images
++      summary: Automatically crop transparent padding from a PNG image.
++      description: |
++        Removes transparent borders from a PNG input, optionally extending the
++        detected bounding box by a few pixels of padding. The cropped image is
++        saved to `/mnt/data` with 300&nbsp;DPI metadata and a sandbox download link is
++        returned in markdown format along with bounding-box diagnostics.
++      requestBody:
++        required: true
++        content:
++          application/json:
++            schema:
++              $ref: "#/components/schemas/AutocropRequest"
++            example:
++              image:
++                b64_json: "<base64>"
++              padding: 24
++      responses:
++        "200":
++          description: Markdown response describing the cropped output and download link.
++          content:
++            text/markdown:
++              schema:
++                type: string
++              example: |
++                ✅ 자동 크롭 완료 — 1024x768px
++                [크롭된 PNG 다운로드](sandbox:/mnt/data/autocrop_0001.png)
++                📐 Bounding Box: left=12, top=24, right=1036, bottom=792
++        "400":
++          description: Returned when the PNG data cannot be decoded.
++          content:
++            text/plain:
++              schema:
++                type: string
++components:
++  schemas:
++    ImageInput:
++      description: >-
++        PNG payload provided either as an OpenAI-style dictionary or a
++        data-URL/string path accessible to the runtime.
++      oneOf:
++        - type: object
++          required:
++            - b64_json
++          properties:
++            b64_json:
++              type: string
++              format: byte
++              description: Base64-encoded PNG content as returned by OpenAI image APIs.
++        - type: string
++          description: >-
++            Either a `data:image/...;base64,` URL or a filesystem path that can be
++            read by the runtime.
++    PostprocessImagesRequest:
++      type: object
++      required:
++        - images
++      properties:
++        images:
++          type: array
++          minItems: 1
++          items:
++            $ref: "#/components/schemas/ImageInput"
++    ResizeImagesRequest:
++      type: object
++      properties:
++        factor:
++          type: number
++          default: 2.0
++          minimum: 0.1
++          maximum: 4.0
++          description: Scale multiplier applied to the cached images.
++        selectedIndices:
++          type: array
++          items:
++            type: integer
++            minimum: 1
++          description: 1-based indices of the cached images that should be resized.
++    AutocropRequest:
++      type: object
++      required:
++        - image
++      properties:
++        image:
++          $ref: "#/components/schemas/ImageInput"
++        padding:
++          type: integer
++          default: 0
++          minimum: 0
++          description: >-
++            Expands each side of the detected bounding box by the provided number
++            of pixels after cropping. 
+EOF
+)
