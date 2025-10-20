@@ -21,6 +21,11 @@ paths:
         strings), rescales each so its longest side is 2048&nbsp;px, saves PNGs with
         300&nbsp;DPI metadata to `/mnt/data`, then returns markdown links for
         downloading the optimized files from the sandbox.
+        Accepts the raw outputs returned from image generation APIs (either
+        OpenAI-style `b64_json` dictionaries or data-URL strings), rescales the
+        assets so the longest side is 2048&nbsp;px, writes them to `/mnt/data`
+        with 300&nbsp;DPI metadata, and returns markdown links that can be used to
+        download the processed images from the GPT sandbox environment.
       requestBody:
         required: true
         content:
