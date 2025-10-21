@@ -1,15 +1,18 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID");
 serve(async (req)=>{
   const url = new URL(req.url);
   const redirect_uri = url.searchParams.get("redirect_uri"); // GPT 콜백 주소
   const state = url.searchParams.get("state");
   const client_id = url.searchParams.get("client_id");
+  const resolvedClientId = client_id?.trim() || GOOGLE_CLIENT_ID?.trim();
   console.log("oauth-authorize called with:", {
     redirect_uri,
     state,
-    client_id
+    client_id,
+    resolvedClientId
   });
-  if (!redirect_uri || !state || !client_id) {
+  if (!redirect_uri || !state || !resolvedClientId) {
     return new Response("Missing params", {
       status: 400
     });
@@ -17,7 +20,7 @@ serve(async (req)=>{
   // 👉 Supabase Auth 경유 ❌, 바로 Google OAuth 동의화면으로
   const googleAuthUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   googleAuthUrl.searchParams.set("response_type", "code");
-  googleAuthUrl.searchParams.set("client_id", client_id);
+  googleAuthUrl.searchParams.set("client_id", resolvedClientId);
   googleAuthUrl.searchParams.set("redirect_uri", redirect_uri);
   googleAuthUrl.searchParams.set("scope", "openid email profile");
   googleAuthUrl.searchParams.set("state", state);
