@@ -8,19 +8,22 @@ info:
     by creative tools.
 servers:
   - url: https://raw.githubusercontent.com/loopyti/gpt-test/main/API
-    description: Hosted helper scripts that can be executed from the GPT Actions sandbox.
+    description: Legacy static scripts (Python/TypeScript) for GPT sandbox usage.
+  - url: https://YOUR_PROJECT.supabase.co/functions/v1
+    description: Supabase Edge Functions providing hosted image processing APIs.
 paths:
   /postprocess-images:
     post:
       operationId: postprocessImages
       tags:
         - images
-      summary: Convert raw base64 image payloads into optimized PNG downloads.
-      description: |
-        Consumes raw image outputs (OpenAI `b64_json` objects or data-URL
-        strings), rescales each so its longest side is 2048 nbsp;px, saves PNGs with
-        300 nbsp;DPI metadata to `/mnt/data`, then returns markdown links for
-        downloading the optimized files from the sandbox.
+      summary: Convert raw base64 image payloads into optimized, auto-cropped PNG payloads.
+        description: |
+          Consumes raw image outputs (OpenAI `b64_json` objects or data-URL
+          strings), trims transparent padding (with optional extra padding),
+          rescales each so its longest side is the requested dimension, embeds
+          300&nbsp;DPI metadata, and responds with Base64-encoded PNGs (no
+          Supabase Storage writes).
       requestBody:
         required: true
         content:
@@ -33,99 +36,57 @@ paths:
                 - "data:image/png;base64,<base64>"
       responses:
         "200":
-          description: Markdown summary with download links for the processed PNG files.
+          description: JSON payload containing the processed PNGs as Base64 strings.
           content:
-            text/markdown:
+            application/json:
               schema:
-                type: string
-              example: |
-                ✅이미지 생성 완료
-
-                [2048px·300dpi 다운로드](sandbox:/mnt/data/img_01_2048_300dpi.png)
+                $ref: "#/components/schemas/PostprocessImagesResponse"
         "400":
           description: Returned if none of the provided items can be decoded.
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
+                $ref: "#/components/schemas/ErrorResponse"
   /resize-images:
     post:
       operationId: resizeImages
       tags:
         - images
       summary: Create alternate sizes for the last batch of processed images.
-      description: |
-        Resizes the cached image set produced by a previous `postprocessImages`
-        call. When `selectedIndices` is omitted, every cached image is resized.
-        The result is printed as markdown links targeting sandbox download URLs.
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ResizeImagesRequest"
-            example:
+        description: |
+          Resizes inline Base64/data-URL payloads by a provided scale factor and
+          returns Base64-encoded PNGs with embedded DPI metadata.
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResizeImagesRequest"
+              example:
+              images:
+                - "data:image/png;base64,<base64>"
+                - b64_json: "<base64>"
               factor: 1.5
-              selectedIndices: [1, 3]
+              selectedIndices: [1]
       responses:
         "200":
-          description: Markdown list of download links for the resized PNG files.
+          description: JSON payload describing the resized images (Base64-encoded PNGs).
           content:
-            text/markdown:
+            application/json:
               schema:
-                type: string
-              example: |
-                1️⃣ [x1.5 다운로드](sandbox:/mnt/data/img_01_2048_300dpi_x1.5.png)
+                $ref: "#/components/schemas/ResizeImagesResponse"
         "400":
-          description: Returned when no cached images exist or the selected indices do not match.
+          description: Returned when no valid input images were provided.
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
-  /autocrop-png:
-    post:
-      operationId: autocropPng
-      tags:
-        - images
-      summary: Automatically crop transparent padding from a PNG image.
-      description: |
-        Removes transparent borders from a PNG input, optionally extending the
-        detected bounding box by a few pixels of padding. The cropped image is
-        saved to `/mnt/data` with 300&nbsp;DPI metadata and a sandbox download link is
-        returned in markdown format along with bounding-box diagnostics.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AutocropRequest"
-            example:
-              image:
-                b64_json: "<base64>"
-              padding: 24
-      responses:
-        "200":
-          description: Markdown response describing the cropped output and download link.
-          content:
-            text/markdown:
-              schema:
-                type: string
-              example: |
-                ✅ 자동 크롭 완료 — 1024x768px
-                [크롭된 PNG 다운로드](sandbox:/mnt/data/autocrop_0001.png)
-                📐 Bounding Box: left=12, top=24, right=1036, bottom=792
-        "400":
-          description: Returned when the PNG data cannot be decoded.
-          content:
-            text/plain:
-              schema:
-                type: string
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     ImageInput:
       description: >-
         PNG payload provided either as an OpenAI-style dictionary or a
-        data-URL/string path accessible to the runtime.
+        base64-encoded `data:image/...` URL string.
       oneOf:
         - type: object
           required:
@@ -137,8 +98,7 @@ components:
               description: Base64-encoded PNG content as returned by OpenAI image APIs.
         - type: string
           description: >-
-            Either a `data:image/...;base64,` URL or a filesystem path that can be
-            read by the runtime.
+            A `data:image/...;base64,` URL string containing PNG image data.
     PostprocessImagesRequest:
       type: object
       required:
@@ -149,32 +109,129 @@ components:
           minItems: 1
           items:
             $ref: "#/components/schemas/ImageInput"
+        targetMaxDimension:
+          type: integer
+          minimum: 1
+          default: 2048
+        targetDpi:
+          type: integer
+          minimum: 72
+          default: 300
+        autocropPadding:
+          type: integer
+          minimum: 0
+          default: 0
+          description: Extra pixels of padding to preserve around the detected crop bounds.
     ResizeImagesRequest:
       type: object
+      required:
+        - images
       properties:
-        factor:
-          type: number
-          default: 2.0
-          minimum: 0.1
-          maximum: 4.0
-          description: Scale multiplier applied to the cached images.
+        images:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImageInput"
+          description: Images provided inline as base64/data-URL payloads.
         selectedIndices:
           type: array
           items:
             type: integer
             minimum: 1
-          description: 1-based indices of the cached images that should be resized.
-    AutocropRequest:
-      type: object
-      required:
-        - image
-      properties:
-        image:
-          $ref: "#/components/schemas/ImageInput"
-        padding:
-          type: integer
-          default: 0
-          minimum: 0
           description: >-
-            Expands each side of the detected bounding box by the provided number
-            of pixels after cropping.
+            Optional 1-based indices specifying which of the provided inputs (in the
+            order they appear) should be resized. When omitted, all supplied images
+            are processed.
+        factor:
+          type: number
+          default: 2.0
+          minimum: 0.1
+          maximum: 8.0
+          description: Scale multiplier applied to each image (clamped between 0.1x and 8x).
+        targetDpi:
+          type: integer
+          minimum: 72
+          default: 300
+    PostprocessImagesResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        targetMaxDimension:
+          type: integer
+        targetDpi:
+          type: integer
+        autocropPadding:
+          type: integer
+        images:
+          type: array
+          items:
+            $ref: "#/components/schemas/PostprocessedImage"
+    ResizeImagesResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        factor:
+          type: number
+        targetDpi:
+          type: integer
+        images:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResizedImage"
+    PostprocessedImage:
+      type: object
+      properties:
+        base64:
+          type: string
+          format: byte
+          description: Base64-encoded PNG (without a data-URL prefix).
+        dataUrl:
+          type: string
+          format: uri
+          description: Convenience `data:image/png;base64,...` representation of the PNG.
+        width:
+          type: integer
+        height:
+          type: integer
+        originalIndex:
+          type: integer
+        cropBounds:
+          type: object
+          properties:
+            left:
+              type: integer
+            top:
+              type: integer
+            right:
+              type: integer
+            bottom:
+              type: integer
+        croppedWidth:
+          type: integer
+        croppedHeight:
+          type: integer
+    ResizedImage:
+      type: object
+      properties:
+        base64:
+          type: string
+          format: byte
+          description: Base64-encoded PNG (without a data-URL prefix).
+        dataUrl:
+          type: string
+          format: uri
+          description: Convenience `data:image/png;base64,...` representation of the PNG.
+        width:
+          type: integer
+        height:
+          type: integer
+        originalIndex:
+          type: integer
+          minimum: 1
+          description: Original 1-based index of the source image in the request payload.
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
