@@ -61,13 +61,6 @@ export async function resizeToMaxDimension(
   target: number,
 ): Promise<{ image: Image; info: ProcessedImageInfo }> {
   const image = await Image.decode(buffer);
-  return resizeImageToMaxDimension(image, target);
-}
-
-export async function resizeImageToMaxDimension(
-  image: Image,
-  target: number,
-): Promise<{ image: Image; info: ProcessedImageInfo }> {
   const { width, height } = image;
   const longestSide = Math.max(width, height);
 
@@ -95,17 +88,10 @@ export async function resizeByFactor(
 }
 
 export async function autocropTransparent(
-  source: Uint8Array | Image,
+  buffer: Uint8Array,
   padding: number,
 ): Promise<{ image: Image; info: ProcessedImageInfo; bounds: { left: number; top: number; right: number; bottom: number } }> {
-  const image = source instanceof Image ? source : await Image.decode(source);
-  return autocropImage(image, padding);
-}
-
-async function autocropImage(
-  image: Image,
-  padding: number,
-): Promise<{ image: Image; info: ProcessedImageInfo; bounds: { left: number; top: number; right: number; bottom: number } }> {
+  const image = await Image.decode(buffer);
   if (image.width === 0 || image.height === 0) {
     throw new Error("이미지 크기가 유효하지 않습니다.");
   }

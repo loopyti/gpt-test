@@ -10,8 +10,9 @@ hosting).
 
 | Function | Description |
 | --- | --- |
-| `postprocess-images` | Accepts raw image payloads (OpenAI `b64_json` objects or data-URLs), automatically trims transparent padding (optional extra padding via `autocropPadding`), resizes each so the longest edge matches the requested dimension, stamps 300&nbsp;DPI metadata, stores the PNG in Supabase Storage, and returns a JSON manifest of download URLs. |
+| `postprocess-images` | Accepts raw image payloads (OpenAI `b64_json` objects or data-URLs), resizes each so the longest edge matches the requested dimension, stamps 300&nbsp;DPI metadata, stores the PNG in Supabase Storage, and returns a JSON manifest of download URLs. |
 | `resize-images` | Generates alternate sizes from previously stored outputs or inline payloads. Optional `selectedIndices` allow processing specific items, and files are saved back to Supabase Storage using the same metadata helpers. |
+| `autocrop-png` | Crops transparent padding, optionally applying additional padding, then stores the cropped PNG and reports the bounding box. |
 
 ## Environment variables
 
@@ -30,6 +31,7 @@ exposing the responses to end users.
 ```bash
 supabase functions deploy postprocess-images
 supabase functions deploy resize-images
+supabase functions deploy autocrop-png
 ```
 
 After deployment, update the Custom GPT Action (or other client) to call the

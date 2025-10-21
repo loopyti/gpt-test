@@ -17,13 +17,12 @@ paths:
       operationId: postprocessImages
       tags:
         - images
-      summary: Convert raw base64 image payloads into optimized, auto-cropped PNG downloads.
+      summary: Convert raw base64 image payloads into optimized PNG downloads.
         description: |
           Consumes raw image outputs (OpenAI `b64_json` objects or data-URL
-          strings), trims transparent padding (with optional extra padding),
-          rescales each so its longest side is the requested dimension, embeds
-          300&nbsp;DPI metadata, stores the PNGs in Supabase Storage, and responds
-          with JSON describing the uploaded files.
+          strings), rescales each so its longest side is the requested dimension,
+          embeds 300&nbsp;DPI metadata, stores the PNGs in Supabase Storage, and
+          responds with JSON describing the uploaded files.
       requestBody:
         required: true
         content:
@@ -82,6 +81,40 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /autocrop-png:
+    post:
+      operationId: autocropPng
+      tags:
+        - images
+      summary: Automatically crop transparent padding from a PNG image.
+        description: |
+          Removes transparent borders from a PNG input, optionally extending the
+          detected bounding box by a few pixels of padding. The cropped PNG is
+          saved to Supabase Storage with 300&nbsp;DPI metadata and the JSON response
+          includes the storage location plus bounding-box diagnostics.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutocropRequest"
+            example:
+              image:
+                b64_json: "<base64>"
+              padding: 24
+      responses:
+        "200":
+          description: JSON payload that reports the cropped dimensions and download URL.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutocropResponse"
+        "400":
+          description: Returned when the PNG data cannot be decoded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     ImageInput:
@@ -122,11 +155,6 @@ components:
         filenamePrefix:
           type: string
           description: Prefix applied to stored filenames in Supabase Storage.
-        autocropPadding:
-          type: integer
-          minimum: 0
-          default: 0
-          description: Extra pixels of padding to preserve around the detected crop bounds.
     ResizeImagesRequest:
       type: object
       properties:
@@ -162,6 +190,25 @@ components:
         filenamePrefix:
           type: string
           description: Prefix applied to stored filenames in Supabase Storage.
+    AutocropRequest:
+      type: object
+      properties:
+        bucket:
+          type: string
+        path:
+          type: string
+        publicUrl:
+          type: string
+        width:
+          type: integer
+          default: 0
+          minimum: 0
+          description: >-
+            Expands each side of the detected bounding box by the provided number
+            of pixels after cropping.
+        filenamePrefix:
+          type: string
+          description: Optional prefix for the stored file name in Supabase Storage.
     PostprocessImagesResponse:
       type: object
       properties:
@@ -170,8 +217,6 @@ components:
         targetMaxDimension:
           type: integer
         targetDpi:
-          type: integer
-        autocropPadding:
           type: integer
         files:
           type: array
@@ -190,6 +235,28 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/StoredFile"
+    AutocropResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        width:
+          type: integer
+        height:
+          type: integer
+        bounds:
+          type: object
+          properties:
+            left:
+              type: integer
+            top:
+              type: integer
+            right:
+              type: integer
+            bottom:
+              type: integer
+        file:
+          $ref: "#/components/schemas/StoredFile"
     StoredFile:
       type: object
       properties:
@@ -207,24 +274,6 @@ components:
           type: integer
           minimum: 1
           description: Original 1-based index of the source image in the request payload.
-        cropBounds:
-          type: object
-          nullable: true
-          properties:
-            left:
-              type: integer
-            top:
-              type: integer
-            right:
-              type: integer
-            bottom:
-              type: integer
-        croppedWidth:
-          type: integer
-          description: Width of the image immediately after auto-cropping but before resizing.
-        croppedHeight:
-          type: integer
-          description: Height of the image immediately after auto-cropping but before resizing.
     ErrorResponse:
       type: object
       properties:
