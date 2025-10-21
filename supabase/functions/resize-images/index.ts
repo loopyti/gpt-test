@@ -4,10 +4,11 @@ import {
   encodePngWithMetadata,
   errorResponse,
   resizeByFactor,
+  pngToBase64,
   type ImagePayload,
 } from "../_shared/image-utils.ts";
 import { corsHeaders, handleOptions } from "../_shared/cors.ts";
-import { createStorageContext, uploadPng, downloadPng, jsonResponse } from "../_shared/storage.ts";
+import { jsonResponse } from "../_shared/storage.ts";
 
 const DEFAULT_FACTOR = 2.0;
 const DEFAULT_DPI = 300;
@@ -19,11 +20,9 @@ function clamp(value: number, min: number, max: number): number {
 
 interface ResizeRequestBody {
   images?: ImagePayload[];
-  paths?: string[];
   selectedIndices?: number[];
   factor?: number;
   targetDpi?: number;
-  filenamePrefix?: string;
 }
 
 serve(async (req) => {
@@ -52,21 +51,12 @@ serve(async (req) => {
   );
 
   const sources = [] as Array<{ payload: ImagePayload; index: number }>;
-  let runningIndex = 1;
   if (Array.isArray(body.images)) {
-    for (const image of body.images) {
-      if (selectedIndices.size === 0 || selectedIndices.has(runningIndex)) {
-        sources.push({ payload: image, index: runningIndex });
+    for (let i = 0; i < body.images.length; i += 1) {
+      const index = i + 1;
+      if (selectedIndices.size === 0 || selectedIndices.has(index)) {
+        sources.push({ payload: body.images[i], index });
       }
-      runningIndex += 1;
-    }
-  }
-  if (Array.isArray(body.paths)) {
-    for (const path of body.paths) {
-      if (selectedIndices.size === 0 || selectedIndices.has(runningIndex)) {
-        sources.push({ payload: { path }, index: runningIndex });
-      }
-      runningIndex += 1;
     }
   }
 
@@ -74,7 +64,7 @@ serve(async (req) => {
     if (selectedIndices.size > 0) {
       return errorResponse("선택한 인덱스에 해당하는 이미지가 없습니다.");
     }
-    return errorResponse("'images' 또는 'paths' 중 하나 이상을 제공해야 합니다.");
+    return errorResponse("'images' 배열은 최소 1개 이상의 항목을 포함해야 합니다.");
   }
 
   const factor = clamp(
@@ -83,36 +73,41 @@ serve(async (req) => {
     8,
   );
   const targetDpi = Math.max(72, Math.floor(body.targetDpi ?? DEFAULT_DPI));
-  const storage = createStorageContext();
 
   try {
     const results = [] as Array<{
-      file: Awaited<ReturnType<typeof uploadPng>>;
+      base64: string;
       width: number;
       height: number;
       index: number;
+      scale: number;
+      wasResized: boolean;
     }>;
 
     for (let index = 0; index < sources.length; index += 1) {
       const source = sources[index];
-      const buffer = await decodeImage(source.payload, async (path) => downloadPng(storage, path));
-      const { image, info } = await resizeByFactor(buffer, factor);
-      const png = await encodePngWithMetadata(image, targetDpi, SOFTWARE_LABEL);
-      const factorLabel = factor.toFixed(2).replace(/\.00$/, "").replace(/0+$/, "");
-      const filename = `${body.filenamePrefix ?? "resized"}_${String(source.index).padStart(2, "0")}_x${factorLabel}_${info.width}x${info.height}_${targetDpi}dpi.png`;
-      const stored = await uploadPng(storage, filename, png);
-      results.push({ file: stored, width: info.width, height: info.height, index: source.index });
+      const buffer = await decodeImage(source.payload);
+      const resized = await resizeByFactor(buffer, factor);
+      const png = await encodePngWithMetadata(resized.image, targetDpi, SOFTWARE_LABEL);
+      const base64 = pngToBase64(png);
+      results.push({
+        base64,
+        width: resized.info.width,
+        height: resized.info.height,
+        index: source.index,
+        scale: resized.scale,
+        wasResized: resized.wasResized,
+      });
     }
 
     return jsonResponse({
       message: "✅ 리사이즈 완료",
       factor,
       targetDpi,
-      files: results.map((result) => ({
-        ...result.file,
-        width: result.width,
-        height: result.height,
+      images: results.map((result) => ({
+        ...result,
         originalIndex: result.index,
+        dataUrl: `data:image/png;base64,${result.base64}`,
       })),
     });
   } catch (error) {
