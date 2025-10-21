@@ -1,0 +1,22 @@
+import { Image } from "https://esm.sh/imagescript@1.2.16";
+
+// 투명 여백 자동 크롭 (간단 버전)
+function autoCrop(img: Image, threshold = 10) {
+  const w = img.width, h = img.height;
+  let minX = w, minY = h, maxX = 0, maxY = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const alpha = img.getRGBAAt(x, y)[3];
+      if (alpha > threshold) {
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  if (minX < maxX && minY < maxY) {
+    return img.crop(minX, minY, maxX - minX, maxY - minY);
+  }
+  return img;
+}
