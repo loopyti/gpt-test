@@ -2,7 +2,6 @@ import {
   Image,
   ResamplingFilter,
 } from "https://deno.land/x/imagescript@1.2.17/mod.ts";
-import { encode as encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";
 import { corsHeaders } from "./cors.ts";
 
 const PNG_SIGNATURE = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
@@ -14,10 +13,6 @@ export type ImagePayload =
       b64_json?: string | null;
       path?: string | null;
     };
-
-export function pngToBase64(png: Uint8Array): string {
-  return encodeBase64(png);
-}
 
 export interface ProcessedImageInfo {
   width: number;
@@ -66,13 +61,6 @@ export async function resizeToMaxDimension(
   target: number,
 ): Promise<{ image: Image; info: ProcessedImageInfo }> {
   const image = await Image.decode(buffer);
-  return resizeImageToMaxDimension(image, target);
-}
-
-export async function resizeImageToMaxDimension(
-  image: Image,
-  target: number,
-): Promise<{ image: Image; info: ProcessedImageInfo }> {
   const { width, height } = image;
   const longestSide = Math.max(width, height);
 
@@ -100,17 +88,10 @@ export async function resizeByFactor(
 }
 
 export async function autocropTransparent(
-  source: Uint8Array | Image,
+  buffer: Uint8Array,
   padding: number,
 ): Promise<{ image: Image; info: ProcessedImageInfo; bounds: { left: number; top: number; right: number; bottom: number } }> {
-  const image = source instanceof Image ? source : await Image.decode(source);
-  return autocropImage(image, padding);
-}
-
-async function autocropImage(
-  image: Image,
-  padding: number,
-): Promise<{ image: Image; info: ProcessedImageInfo; bounds: { left: number; top: number; right: number; bottom: number } }> {
+  const image = await Image.decode(buffer);
   if (image.width === 0 || image.height === 0) {
     throw new Error("이미지 크기가 유효하지 않습니다.");
   }
@@ -295,15 +276,5 @@ export function errorResponse(message: string, status = 400): Response {
       "Content-Type": "application/json; charset=utf-8",
       ...corsHeaders,
     },
-  });
-}
-
-export function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
-  return new Response(JSON.stringify(body), {
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      ...corsHeaders,
-    },
-    ...init,
   });
 }

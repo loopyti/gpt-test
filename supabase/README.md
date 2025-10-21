@@ -10,17 +10,28 @@ hosting).
 
 | Function | Description |
 | --- | --- |
-| `postprocess-images` | Accepts raw image payloads (OpenAI `b64_json` objects or data-URLs), automatically trims transparent padding (optional extra padding via `autocropPadding`), resizes each so the longest edge matches the requested dimension, stamps 300&nbsp;DPI metadata, and returns Base64-encoded PNGs directly in the JSON response. |
-| `resize-images` | Generates alternate sizes from inline Base64/data-URL payloads. Optional `selectedIndices` allow processing specific items, and each response contains the resized PNGs encoded as Base64 strings (no Supabase Storage writes). |
+| `postprocess-images` | Accepts raw image payloads (OpenAI `b64_json` objects or data-URLs), resizes each so the longest edge matches the requested dimension, stamps 300&nbsp;DPI metadata, stores the PNG in Supabase Storage, and returns a JSON manifest of download URLs. |
+| `resize-images` | Generates alternate sizes from previously stored outputs or inline payloads. Optional `selectedIndices` allow processing specific items, and files are saved back to Supabase Storage using the same metadata helpers. |
+| `autocrop-png` | Crops transparent padding, optionally applying additional padding, then stores the cropped PNG and reports the bounding box. |
+
+## Environment variables
+
+Set the following values before deploying the functions:
+
+- `SUPABASE_URL` – Supabase project URL (automatically supplied during deployment).
+- `SUPABASE_SERVICE_ROLE_KEY` – Service role key used for Storage access (automatically supplied during deployment).
+- `IMAGE_BUCKET` – Storage bucket name that will hold generated PNGs (default: `image-outputs`).
+- `IMAGE_FOLDER_PREFIX` – Folder prefix inside the bucket for grouping outputs (default: `gpt`).
+
+Ensure the target bucket allows public read access or generate signed URLs before
+exposing the responses to end users.
 
 ## Deployment
-
-These functions only rely on the default Supabase Edge runtime environment—no
-custom Storage credentials or additional variables are required.
 
 ```bash
 supabase functions deploy postprocess-images
 supabase functions deploy resize-images
+supabase functions deploy autocrop-png
 ```
 
 After deployment, update the Custom GPT Action (or other client) to call the

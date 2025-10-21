@@ -17,13 +17,12 @@ paths:
       operationId: postprocessImages
       tags:
         - images
-      summary: Convert raw base64 image payloads into optimized, auto-cropped PNG payloads.
+      summary: Convert raw base64 image payloads into optimized PNG downloads.
         description: |
           Consumes raw image outputs (OpenAI `b64_json` objects or data-URL
-          strings), trims transparent padding (with optional extra padding),
-          rescales each so its longest side is the requested dimension, embeds
-          300&nbsp;DPI metadata, and responds with Base64-encoded PNGs (no
-          Supabase Storage writes).
+          strings), rescales each so its longest side is the requested dimension,
+          embeds 300&nbsp;DPI metadata, stores the PNGs in Supabase Storage, and
+          responds with JSON describing the uploaded files.
       requestBody:
         required: true
         content:
@@ -36,7 +35,7 @@ paths:
                 - "data:image/png;base64,<base64>"
       responses:
         "200":
-          description: JSON payload containing the processed PNGs as Base64 strings.
+          description: JSON payload that lists the uploaded PNG files and their metadata.
           content:
             application/json:
               schema:
@@ -54,27 +53,62 @@ paths:
         - images
       summary: Create alternate sizes for the last batch of processed images.
         description: |
-          Resizes inline Base64/data-URL payloads by a provided scale factor and
-          returns Base64-encoded PNGs with embedded DPI metadata.
-        requestBody:
-          required: true
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ResizeImagesRequest"
-              example:
-              images:
-                - "data:image/png;base64,<base64>"
-                - b64_json: "<base64>"
+          Creates alternate sizes using previously stored file paths or inline
+          payloads. Each resized PNG is uploaded to Supabase Storage with DPI
+          metadata and included in the JSON response payload.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResizeImagesRequest"
+            example:
+              paths:
+                - "gpt/img_01_2048x2048_300dpi.png"
+                - "gpt/img_02_2048x2048_300dpi.png"
               factor: 1.5
               selectedIndices: [1]
       responses:
         "200":
-          description: JSON payload describing the resized images (Base64-encoded PNGs).
+          description: JSON payload describing the resized files that were generated.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ResizeImagesResponse"
+        "400":
+          description: Returned when no valid input images were provided.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /autocrop-png:
+    post:
+      operationId: autocropPng
+      tags:
+        - images
+      summary: Automatically crop transparent padding from a PNG image.
+        description: |
+          Removes transparent borders from a PNG input, optionally extending the
+          detected bounding box by a few pixels of padding. The cropped PNG is
+          saved to Supabase Storage with 300&nbsp;DPI metadata and the JSON response
+          includes the storage location plus bounding-box diagnostics.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutocropRequest"
+            example:
+              image:
+                b64_json: "<base64>"
+              padding: 24
+      responses:
+        "200":
+          description: JSON payload that reports the cropped dimensions and download URL.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutocropResponse"
         "400":
           description: Returned when no valid input images were provided.
           content:
@@ -117,11 +151,9 @@ components:
           type: integer
           minimum: 72
           default: 300
-        autocropPadding:
-          type: integer
-          minimum: 0
-          default: 0
-          description: Extra pixels of padding to preserve around the detected crop bounds.
+        filenamePrefix:
+          type: string
+          description: Prefix applied to stored filenames in Supabase Storage.
     ResizeImagesRequest:
       type: object
       required:
@@ -132,6 +164,11 @@ components:
           items:
             $ref: "#/components/schemas/ImageInput"
           description: Images provided inline as base64/data-URL payloads.
+        paths:
+          type: array
+          items:
+            type: string
+          description: Stored object paths returned by the post-process endpoint.
         selectedIndices:
           type: array
           items:
@@ -139,8 +176,8 @@ components:
             minimum: 1
           description: >-
             Optional 1-based indices specifying which of the provided inputs (in the
-            order they appear) should be resized. When omitted, all supplied images
-            are processed.
+            order they appear across `images` followed by `paths`) should be resized.
+            When omitted, all supplied images/paths are processed.
         factor:
           type: number
           default: 2.0
@@ -151,6 +188,28 @@ components:
           type: integer
           minimum: 72
           default: 300
+        filenamePrefix:
+          type: string
+          description: Prefix applied to stored filenames in Supabase Storage.
+    AutocropRequest:
+      type: object
+      properties:
+        bucket:
+          type: string
+        path:
+          type: string
+        publicUrl:
+          type: string
+        width:
+          type: integer
+          default: 0
+          minimum: 0
+          description: >-
+            Expands each side of the detected bounding box by the provided number
+            of pixels after cropping.
+        filenamePrefix:
+          type: string
+          description: Optional prefix for the stored file name in Supabase Storage.
     PostprocessImagesResponse:
       type: object
       properties:
@@ -160,12 +219,10 @@ components:
           type: integer
         targetDpi:
           type: integer
-        autocropPadding:
-          type: integer
-        images:
+        files:
           type: array
           items:
-            $ref: "#/components/schemas/PostprocessedImage"
+            $ref: "#/components/schemas/StoredFile"
     ResizeImagesResponse:
       type: object
       properties:
@@ -175,28 +232,20 @@ components:
           type: number
         targetDpi:
           type: integer
-        images:
+        files:
           type: array
           items:
-            $ref: "#/components/schemas/ResizedImage"
-    PostprocessedImage:
+            $ref: "#/components/schemas/StoredFile"
+    AutocropResponse:
       type: object
       properties:
-        base64:
+        message:
           type: string
-          format: byte
-          description: Base64-encoded PNG (without a data-URL prefix).
-        dataUrl:
-          type: string
-          format: uri
-          description: Convenience `data:image/png;base64,...` representation of the PNG.
         width:
           type: integer
         height:
           type: integer
-        originalIndex:
-          type: integer
-        cropBounds:
+        bounds:
           type: object
           properties:
             left:
@@ -207,21 +256,17 @@ components:
               type: integer
             bottom:
               type: integer
-        croppedWidth:
-          type: integer
-        croppedHeight:
-          type: integer
-    ResizedImage:
+        file:
+          $ref: "#/components/schemas/StoredFile"
+    StoredFile:
       type: object
       properties:
-        base64:
+        bucket:
           type: string
-          format: byte
-          description: Base64-encoded PNG (without a data-URL prefix).
-        dataUrl:
+        path:
           type: string
-          format: uri
-          description: Convenience `data:image/png;base64,...` representation of the PNG.
+        publicUrl:
+          type: string
         width:
           type: integer
         height:
