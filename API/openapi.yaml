@@ -192,12 +192,14 @@ components:
           description: Prefix applied to stored filenames in Supabase Storage.
     AutocropRequest:
       type: object
-      required:
-        - image
       properties:
-        image:
-          $ref: "#/components/schemas/ImageInput"
-        padding:
+        bucket:
+          type: string
+        path:
+          type: string
+        publicUrl:
+          type: string
+        width:
           type: integer
           default: 0
           minimum: 0
