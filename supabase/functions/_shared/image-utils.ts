@@ -2,6 +2,7 @@ import {
   Image,
   ResamplingFilter,
 } from "https://deno.land/x/imagescript@1.2.17/mod.ts";
+import { encode as encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";
 import { corsHeaders } from "./cors.ts";
 
 const PNG_SIGNATURE = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
@@ -17,6 +18,17 @@ export type ImagePayload =
 export interface ProcessedImageInfo {
   width: number;
   height: number;
+}
+
+export interface ResizeOptions {
+  allowUpscale?: boolean;
+}
+
+export interface ResizeImageResult {
+  image: Image;
+  info: ProcessedImageInfo;
+  scale: number;
+  wasResized: boolean;
 }
 
 export async function decodeImage(payload: ImagePayload, loader: (path: string) => Promise<Uint8Array> | undefined = () => undefined): Promise<Uint8Array> {
@@ -59,43 +71,96 @@ export async function decodeImage(payload: ImagePayload, loader: (path: string) 
 export async function resizeToMaxDimension(
   buffer: Uint8Array,
   target: number,
-): Promise<{ image: Image; info: ProcessedImageInfo }> {
+  options: ResizeOptions = {},
+): Promise<ResizeImageResult> {
   const image = await Image.decode(buffer);
-  const { width, height } = image;
-  const longestSide = Math.max(width, height);
+  return resizeImageToMaxDimension(image, target, options);
+}
 
-  if (longestSide <= target) {
-    // 원본이 이미 목표 크기 이하라면 업스케일 없이 그대로 반환합니다.
-    return { image, info: { width, height } };
+export async function resizeImageToMaxDimension(
+  image: Image,
+  target: number,
+  options: ResizeOptions = {},
+): Promise<ResizeImageResult> {
+  if (image.width === 0 || image.height === 0) {
+    throw new Error("이미지 크기가 유효하지 않습니다.");
   }
 
-  const scale = target / longestSide;
-  const targetWidth = Math.max(1, Math.round(width * scale));
-  const targetHeight = Math.max(1, Math.round(height * scale));
+  const { allowUpscale = false } = options;
+  const targetDimension = Math.max(1, Math.floor(target));
+  const longestSide = Math.max(image.width, image.height);
+
+  const shouldResize = allowUpscale ? longestSide !== targetDimension : longestSide > targetDimension;
+  if (!shouldResize) {
+    return {
+      image,
+      info: { width: image.width, height: image.height },
+      scale: 1,
+      wasResized: false,
+    };
+  }
+
+  const scale = targetDimension / longestSide;
+  const targetWidth = Math.max(1, Math.round(image.width * scale));
+  const targetHeight = Math.max(1, Math.round(image.height * scale));
   const resized = await image.resize(targetWidth, targetHeight, ResamplingFilter.LANCZOS3);
-  return { image: resized, info: { width: resized.width, height: resized.height } };
+  return {
+    image: resized,
+    info: { width: resized.width, height: resized.height },
+    scale,
+    wasResized: true,
+  };
 }
 
 export async function resizeByFactor(
   buffer: Uint8Array,
   factor: number,
-): Promise<{ image: Image; info: ProcessedImageInfo }> {
-  const image = await Image.decode(buffer);
-  const targetWidth = Math.max(1, Math.round(image.width * factor));
-  const targetHeight = Math.max(1, Math.round(image.height * factor));
-  const resized = await image.resize(targetWidth, targetHeight, ResamplingFilter.LANCZOS3);
-  return { image: resized, info: { width: resized.width, height: resized.height } };
-}
-
-export async function autocropTransparent(
-  buffer: Uint8Array,
-  padding: number,
-): Promise<{ image: Image; info: ProcessedImageInfo; bounds: { left: number; top: number; right: number; bottom: number } }> {
+): Promise<ResizeImageResult> {
   const image = await Image.decode(buffer);
   if (image.width === 0 || image.height === 0) {
     throw new Error("이미지 크기가 유효하지 않습니다.");
   }
 
+  if (!Number.isFinite(factor) || factor <= 0) {
+    throw new Error("리사이즈 배율이 유효하지 않습니다.");
+  }
+
+  if (Math.abs(factor - 1) < 1e-6) {
+    return {
+      image,
+      info: { width: image.width, height: image.height },
+      scale: 1,
+      wasResized: false,
+    };
+  }
+
+  const targetWidth = Math.max(1, Math.round(image.width * factor));
+  const targetHeight = Math.max(1, Math.round(image.height * factor));
+  const resized = await image.resize(targetWidth, targetHeight, ResamplingFilter.LANCZOS3);
+  return {
+    image: resized,
+    info: { width: resized.width, height: resized.height },
+    scale: factor,
+    wasResized: true,
+  };
+}
+
+export async function autocropTransparent(
+  buffer: Uint8Array,
+  padding: number,
+): Promise<{
+  image: Image;
+  info: ProcessedImageInfo;
+  bounds: { left: number; top: number; right: number; bottom: number };
+  original: ProcessedImageInfo;
+  wasCropped: boolean;
+}> {
+  const image = await Image.decode(buffer);
+  if (image.width === 0 || image.height === 0) {
+    throw new Error("이미지 크기가 유효하지 않습니다.");
+  }
+
+  const original = { width: image.width, height: image.height } as ProcessedImageInfo;
   const bitmap = image.bitmap;
   let minX = image.width;
   let minY = image.height;
@@ -118,7 +183,9 @@ export async function autocropTransparent(
     return {
       image,
       info: { width: image.width, height: image.height },
-      bounds: { left: 0, top: 0, right: image.width, bottom: image.height },
+      bounds: { left: 0, top: 0, right: image.width - 1, bottom: image.height - 1 },
+      original,
+      wasCropped: false,
     };
   }
 
@@ -131,10 +198,19 @@ export async function autocropTransparent(
   const cropHeight = bottom - top + 1;
   const cropped = await image.crop(left, top, cropWidth, cropHeight);
 
+  const wasCropped =
+    left > 0 ||
+    top > 0 ||
+    right < original.width - 1 ||
+    bottom < original.height - 1 ||
+    padding > 0;
+
   return {
     image: cropped,
     info: { width: cropped.width, height: cropped.height },
     bounds: { left, top, right, bottom },
+    original,
+    wasCropped,
   };
 }
 
@@ -146,6 +222,14 @@ export async function encodePngWithMetadata(
   const encoded = new Uint8Array(await image.encode());
   const withDpi = setPngDpi(encoded, dpi);
   return insertSoftwareText(withDpi, softwareLabel);
+}
+
+export function pngToBase64(png: Uint8Array): string {
+  return encodeBase64(png);
+}
+
+export function pngToDataUrl(png: Uint8Array): string {
+  return `data:image/png;base64,${pngToBase64(png)}`;
 }
 
 function ensureSignature(buffer: Uint8Array): void {

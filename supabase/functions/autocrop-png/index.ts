@@ -4,17 +4,17 @@ import {
   decodeImage,
   encodePngWithMetadata,
   errorResponse,
+  pngToBase64,
   type ImagePayload,
 } from "../_shared/image-utils.ts";
 import { corsHeaders, handleOptions } from "../_shared/cors.ts";
-import { createStorageContext, uploadPng, downloadPng, jsonResponse } from "../_shared/storage.ts";
+import { jsonResponse } from "../_shared/storage.ts";
 
 const SOFTWARE_LABEL = "Image Processor Engine";
 
 interface AutocropRequestBody {
   image: ImagePayload;
   padding?: number;
-  filenamePrefix?: string;
 }
 
 serve(async (req) => {
@@ -39,25 +39,19 @@ serve(async (req) => {
   }
 
   const padding = typeof body.padding === "number" && body.padding >= 0 ? Math.floor(body.padding) : 0;
-  const storage = createStorageContext();
-
   try {
-    const buffer = await decodeImage(body.image, async (path) => downloadPng(storage, path));
+    const buffer = await decodeImage(body.image);
     const { image, info, bounds } = await autocropTransparent(buffer, padding);
     const png = await encodePngWithMetadata(image, 300, SOFTWARE_LABEL);
-    const filename = `${body.filenamePrefix ?? "autocrop"}_${crypto.randomUUID()}.png`;
-    const stored = await uploadPng(storage, filename, png);
+    const base64 = pngToBase64(png);
 
     return jsonResponse({
       message: "✅ 자동 크롭 완료",
       width: info.width,
       height: info.height,
       bounds,
-      file: {
-        ...stored,
-        width: info.width,
-        height: info.height,
-      },
+      base64,
+      dataUrl: `data:image/png;base64,${base64}`,
     });
   } catch (error) {
     return errorResponse(
