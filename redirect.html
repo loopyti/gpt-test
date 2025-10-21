@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>🎨요소 제작봇 GPT</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      margin: 0;
+      padding: 2rem;
+      text-align: center;
+    }
+    #warning {
+      display: none;
+      background: #fff3cd;
+      border: 1px solid #ffeeba;
+      padding: 1.5rem;
+      border-radius: 12px;
+      margin-top: 3rem;
+    }
+    button {
+      margin-top: 1rem;
+      padding: .7rem 1rem;
+      border-radius: 8px;
+      border: none;
+      background: #007bff;
+      color: #fff;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #0056b3;
+    }
+  </style>
+</head>
+<body>
+  <h1>요소 제작봇 GPT</h1>
+  <p>잠시 후 GPT 페이지로 이동합니다...</p>
+
+  <!-- 인앱 브라우저 경고 -->
+  <div id="warning">
+    <h2>⚠️ 인앱 브라우저 안내</h2>
+    <p>
+      카카오톡·인스타 인앱 브라우저에서는 사용이 원활하지 않을 수 있어요.<br>
+      복사된 링크로 Safari 또는 Chrome에서 접속을 권장드려요
+    </p>
+    <button onclick="copyLink()">링크 복사하기</button>
+  </div>
+
+  <script>
+    // 👉 실제 GPT 링크 (필수: 모모 GPT 주소로 교체)
+    const target = "https://chatgpt.com/g/g-68f5c93bdc0881919fdb5db5751b994a-rupitiyi-yoso-jejagbos-teseuteujung-3-5";
+
+    // 인앱 브라우저 감지
+    function isInAppBrowser() {
+      const ua = navigator.userAgent.toLowerCase();
+      return ua.includes("kakaotalk") || ua.includes("instagram") || ua.includes("fbav");
+    }
+
+    // 링크 복사
+    function copyLink() {
+      navigator.clipboard.writeText(target).then(() => {
+        alert("✅ 링크가 복사되었습니다.\nSafari 또는 Chrome에서 붙여넣기 해주세요!");
+      });
+    }
+
+    // 페이지 로드 시 동작
+    window.addEventListener("load", () => {
+      if (isInAppBrowser()) {
+        // 인앱이면 안내창만 보여주고 리다이렉트 안 함
+        document.getElementById("warning").style.display = "block";
+      } else {
+        // 일반 브라우저면 자동 리다이렉트
+        window.location.href = target;
+      }
+    });
+  </script>
+</body>
+</html>
