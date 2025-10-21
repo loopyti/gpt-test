@@ -1,0 +1,163 @@
+openapi: 3.1.0
+info:
+  title: Loopyti Image Pipeline
+  version: 1.0.0
+  description: |
+    Edge functions for processing PNG images after generation and for optional manual resizing.
+servers:
+  - url: https://{project_ref}.functions.supabase.co
+    description: Supabase Edge Functions base URL
+    variables:
+      project_ref:
+        default: YOUR_SUPABASE_PROJECT_REF
+paths:
+  /postprocess-images:
+    post:
+      summary: Postprocess freshly generated PNG images.
+      description: |
+        Removes transparent padding, resizes the image so that the longest edge is 2048px, embeds 300 DPI metadata, and returns the PNG as Base64 without writing to storage.
+      operationId: postprocessImages
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                images:
+                  type: array
+                  minItems: 1
+                  description: List of Base64-encoded PNG images (data URI prefix optional).
+                  items:
+                    type: string
+              required:
+                - images
+      responses:
+        '200':
+          description: Processed images with transparent padding removed, resized, and tagged with 300 DPI metadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  images:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        index:
+                          type: integer
+                        width:
+                          type: integer
+                        height:
+                          type: integer
+                        base64:
+                          type: string
+                          description: Base64 encoded PNG output (no data URI prefix).
+                        original:
+                          type: object
+                          properties:
+                            width:
+                              type: integer
+                            height:
+                              type: integer
+        '400':
+          description: Invalid payload
+        '500':
+          description: Internal error
+  /resize-images:
+    post:
+      summary: Resize PNG images by scale or explicit dimensions.
+      description: |
+        Resizes existing PNG images on demand without touching storage. Each image can supply its own scale factor or explicit target dimensions. Outputs Base64 PNG with 300 DPI metadata.
+      operationId: resizeImages
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scale:
+                  type: number
+                  description: Default scale multiplier applied when an item omits its own scale and explicit dimensions.
+                images:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required:
+                      - base64
+                    properties:
+                      base64:
+                        type: string
+                        description: Base64 encoded PNG input (data URI prefix optional).
+                      scale:
+                        type: number
+                        description: Overrides default scale for this image (e.g. 0.5, 1.5, 2).
+                      width:
+                        type: integer
+                        description: Explicit target width in pixels.
+                      height:
+                        type: integer
+                        description: Explicit target height in pixels.
+              required:
+                - images
+      responses:
+        '200':
+          description: Resized images.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  images:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        index:
+                          type: integer
+                        ok:
+                          type: boolean
+                        reason:
+                          type: string
+                          nullable: true
+                        base64:
+                          type: string
+                          nullable: true
+                        width:
+                          type: integer
+                          nullable: true
+                        height:
+                          type: integer
+                          nullable: true
+                        scale:
+                          type: number
+                          nullable: true
+                        original:
+                          type: object
+                          nullable: true
+                          properties:
+                            width:
+                              type: integer
+                            height:
+                              type: integer
+        '400':
+          description: Invalid payload
+        '500':
+          description: Internal error
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
