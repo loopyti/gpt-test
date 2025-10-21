@@ -110,7 +110,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AutocropResponse"
         "400":
-          description: Returned when the PNG data cannot be decoded.
+          description: Returned when no valid input images were provided.
           content:
             application/json:
               schema:
@@ -120,7 +120,7 @@ components:
     ImageInput:
       description: >-
         PNG payload provided either as an OpenAI-style dictionary or a
-        data-URL/string path accessible to the runtime.
+        base64-encoded `data:image/...` URL string.
       oneOf:
         - type: object
           required:
@@ -132,8 +132,7 @@ components:
               description: Base64-encoded PNG content as returned by OpenAI image APIs.
         - type: string
           description: >-
-            Either a `data:image/...;base64,` URL or a filesystem path that can be
-            read by the runtime.
+            A `data:image/...;base64,` URL string containing PNG image data.
     PostprocessImagesRequest:
       type: object
       required:
@@ -157,6 +156,8 @@ components:
           description: Prefix applied to stored filenames in Supabase Storage.
     ResizeImagesRequest:
       type: object
+      required:
+        - images
       properties:
         images:
           type: array
