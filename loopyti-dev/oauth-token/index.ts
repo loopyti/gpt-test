@@ -4,10 +4,26 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID");
 const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET");
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
+export const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, content-type, apikey, x-client-info",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Max-Age": "86400"
+};
+const jsonHeaders = {
+  ...corsHeaders,
+  "Content-Type": "application/json"
+};
 serve(async (req)=>{
+  if (req.method === "OPTIONS") {
+    return new Response("ok", {
+      headers: corsHeaders
+    });
+  }
   if (req.method !== "POST") {
     return new Response("Method Not Allowed", {
-      status: 405
+      status: 405,
+      headers: corsHeaders
     });
   }
   const form = await req.formData();
@@ -15,7 +31,8 @@ serve(async (req)=>{
   const redirect_uri = form.get("redirect_uri")?.toString();
   if (!code || !redirect_uri) {
     return new Response("Missing code or redirect_uri", {
-      status: 400
+      status: 400,
+      headers: corsHeaders
     });
   }
   // 1️⃣ Google 토큰 교환
@@ -38,9 +55,7 @@ serve(async (req)=>{
       detail: google
     }), {
       status: 400,
-      headers: {
-        "content-type": "application/json"
-      }
+      headers: jsonHeaders
     });
   }
   // 2️⃣ Google id_token → Supabase 세션 교환
@@ -63,9 +78,7 @@ serve(async (req)=>{
       detail: supabaseData
     }), {
       status: 400,
-      headers: {
-        "content-type": "application/json"
-      }
+      headers: jsonHeaders
     });
   }
   // 3️⃣ ✅ GPT가 이해할 수 있는 최소 OAuth2 응답 반환
@@ -75,8 +88,6 @@ serve(async (req)=>{
     expires_in: supabaseData.expires_in ?? 3600
   }), {
     status: 200,
-    headers: {
-      "content-type": "application/json"
-    }
+    headers: jsonHeaders
   });
 });

@@ -15,7 +15,7 @@ paths:
     post:
       summary: Postprocess freshly generated PNG images.
       description: |
-        Removes transparent padding, resizes the image so that the longest edge is 2048px, embeds 300 DPI metadata, and returns the PNG as Base64 without writing to storage.
+        Removes transparent padding, resizes the image so that the longest edge is 2048px, embeds 300 DPI metadata, uploads the processed PNG to temporary Supabase Storage, and returns signed download URLs.
       operationId: postprocessImages
       security:
         - bearerAuth: []
@@ -36,15 +36,15 @@ paths:
                 - images
       responses:
         '200':
-          description: Processed images with transparent padding removed, resized, and tagged with 300 DPI metadata.
+          description: Processed PNG download links.
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  ok:
+                  success:
                     type: boolean
-                  images:
+                  results:
                     type: array
                     items:
                       type: object
@@ -55,16 +55,10 @@ paths:
                           type: integer
                         height:
                           type: integer
-                        base64:
+                        url:
                           type: string
-                          description: Base64 encoded PNG output (no data URI prefix).
-                        original:
-                          type: object
-                          properties:
-                            width:
-                              type: integer
-                            height:
-                              type: integer
+                          format: uri
+                          example: "https://ysfaaxlutynasreoegaf.supabase.co/storage/v1/object/sign/temp/post_1234.png"
         '400':
           description: Invalid payload
         '500':

@@ -127,9 +127,11 @@ function ensurePngDpi(pngBytes, dpi) {
 // ------------------------------
 //  Main Logic
 // ------------------------------
-const corsHeaders = {
+export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, content-type, apikey"
+  "Access-Control-Allow-Headers": "authorization, content-type, apikey, x-client-info",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Max-Age": "86400"
 };
 function jsonResponse(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -158,15 +160,17 @@ async function autoCropTransparent(img) {
     }
   }
   if (!found) return img;
-  const cropW = right - left;
-  const cropH = bottom - top;
+  const cropW = right - left + 1;
+  const cropH = bottom - top + 1;
   const cropped = await img.crop(left, top, cropW, cropH);
   return cropped;
 }
 serve(async (req)=>{
-  if (req.method === "OPTIONS") return new Response("ok", {
-    headers: corsHeaders
-  });
+  if (req.method === "OPTIONS") {
+    return new Response("ok", {
+      headers: corsHeaders
+    });
+  }
   try {
     const { images } = await req.json();
     if (!images?.length) return jsonResponse({
@@ -190,17 +194,17 @@ serve(async (req)=>{
         upsert: true
       });
       if (uploadErr) throw uploadErr;
-      const { data: signed } = await supabase.storage.from(bucket).createSignedUrl(filename, 60);
-      const downloadUrl = signed?.signedUrl || "";
-      // 🔐 바로 삭제 (용량 0 유지)
-      await supabase.storage.from(bucket).remove([
-        filename
-      ]);
+      const { data: signed, error: signedErr } = await supabase.storage.from(bucket).createSignedUrl(filename, 60);
+      if (signedErr || !signed?.signedUrl) {
+        console.error("❌ Signed URL 생성 실패:", signedErr?.message);
+        throw new Error("Failed to create signed URL");
+      }
+      const downloadUrl = signed.signedUrl;
       results.push({
         index: i + 1,
         width: img.width,
         height: img.height,
-        link: `[2048px·300dpi 다운로드](${downloadUrl})`
+        url: downloadUrl
       });
     }
     return jsonResponse({
