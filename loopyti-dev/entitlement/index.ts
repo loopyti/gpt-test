@@ -5,9 +5,14 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
 const supabaseService = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 const supabaseAnon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-const corsHeaders = {
+export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, content-type, apikey, x-client-info",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Max-Age": "86400"
+};
+const jsonHeaders = {
+  ...corsHeaders,
   "Content-Type": "application/json"
 };
 serve(async (req)=>{
@@ -22,7 +27,7 @@ serve(async (req)=>{
       valid: false,
       reason: "no_token"
     }), {
-      headers: corsHeaders,
+      headers: jsonHeaders,
       status: 200
     });
   }
@@ -44,14 +49,14 @@ serve(async (req)=>{
             valid: false,
             reason: "expired_license"
           }), {
-            headers: corsHeaders,
+            headers: jsonHeaders,
             status: 200
           });
         }
         return new Response(JSON.stringify({
           valid: true
         }), {
-          headers: corsHeaders,
+          headers: jsonHeaders,
           status: 200
         });
       }
@@ -82,14 +87,14 @@ serve(async (req)=>{
               valid: false,
               reason: "expired_license"
             }), {
-              headers: corsHeaders,
+              headers: jsonHeaders,
               status: 200
             });
           }
           return new Response(JSON.stringify({
             valid: true
           }), {
-            headers: corsHeaders,
+            headers: jsonHeaders,
             status: 200
           });
         }
@@ -105,7 +110,7 @@ serve(async (req)=>{
     valid: false,
     reason: "no_active_license"
   }), {
-    headers: corsHeaders,
+    headers: jsonHeaders,
     status: 200
   });
 });
